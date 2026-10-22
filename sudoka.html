@@ -1,0 +1,932 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"/>
+<title>SUDOKA</title>
+<style>
+:root {
+  --accent-green: #10b981;
+  --accent-green-glow: rgba(16, 185, 129, 0.4);
+  --accent-red: #ef4444;
+  --accent-red-glow: rgba(239, 68, 68, 0.4);
+  --main-grey: #e2e8f0;
+  --main-grey-dark: #94a3b8;
+  --border: rgba(255, 255, 255, 0.1);
+  --bg-dark: #0b0f19;
+  --glass-bg: rgba(30, 41, 59, 0.45);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --cell-bg: rgba(15, 23, 42, 0.6);
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+body {
+  margin: 0; padding: 20px;
+  background: var(--bg-dark);
+  color: var(--main-grey);
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  user-select: none; display: flex; flex-direction: column;
+  height: 100vh; justify-content: center; align-items: center;
+  overflow: hidden; position: relative;
+}
+
+.bg-orbs {
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+  z-index: -1; pointer-events: none; overflow: hidden;
+}
+.orb {
+  position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.4;
+  animation: float 20s infinite ease-in-out alternate;
+  pointer-events: none;
+}
+.orb-1 { width: 400px; height: 400px; background: #1e3a5f; top: -10%; left: -10%; animation-duration: 25s; }
+.orb-2 { width: 350px; height: 350px; background: #064e3b; bottom: -10%; right: -10%; animation-duration: 30s; animation-delay: -5s; }
+.orb-3 { width: 250px; height: 250px; background: #312e81; top: 40%; left: 60%; animation-duration: 22s; animation-delay: -10s; }
+
+@keyframes float {
+  0% { transform: translate(0, 0) scale(1); }
+  100% { transform: translate(30px, -40px) scale(1.1); }
+}
+
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+}
+
+.hidden { display: none !important; }
+
+.sudoku-title {
+  display: flex; justify-content: center;
+  font-weight: 800; font-size: clamp(36px, 10vw, 56px);
+  margin-bottom: 24px; user-select: none; white-space: nowrap;
+  letter-spacing: 0.15em; color: var(--main-grey-dark);
+}
+.sudoku-title span {
+  margin: 0 0.05em; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer; position: relative;
+}
+.sudoku-title span:hover { transform: translateY(-3px) scale(1.1); color: var(--main-grey); }
+.sudoku-title span.active {
+  color: var(--accent-green);
+  text-shadow: 0 0 15px var(--accent-green-glow);
+}
+
+.menu {
+  width: clamp(240px, 90vw, 400px);
+  display: flex; flex-direction: column; align-items: center;
+  padding: 24px; margin-bottom: 16px; z-index: 10;
+  position: relative;
+}
+.menu-levels { display: flex; flex-direction: column; align-items: center; gap: 12px; margin-bottom: 16px; width: 100%; }
+
+.btn {
+  font-weight: 600; font-size: 16px; padding: 14px 0;
+  border-radius: 12px; border: 1px solid var(--glass-border);
+  background: var(--cell-bg); cursor: pointer; display: block; width: 100%;
+  transition: all 0.2s ease; color: var(--main-grey);
+  text-transform: lowercase; letter-spacing: 0.05em;
+}
+.btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: var(--accent-green);
+  box-shadow: 0 0 15px var(--accent-green-glow);
+  transform: translateY(-1px);
+}
+.btn:active { transform: translateY(1px) scale(0.98); }
+
+.menu-bottom-row { display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 16px; width: 100%; margin-top: 8px; }
+
+.btn-icon {
+  background: var(--cell-bg); color: var(--main-grey);
+  border: 1px solid var(--glass-border); border-radius: 12px;
+  width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 20px; cursor: pointer; padding: 0;
+  transition: all 0.2s ease; flex-shrink: 0;
+}
+.btn-icon:hover { background: rgba(255, 255, 255, 0.1); color: #fff; box-shadow: 0 0 12px rgba(255,255,255,0.1); }
+
+.text-author { color: var(--main-grey-dark); font-size: 13px; font-weight: 500; user-select: none; text-align: center; opacity: 0.7; }
+
+#game-area {
+  width: clamp(240px, 95vw, 420px);
+  display: flex; flex-direction: column; align-items: center;
+  padding: 20px; z-index: 10;
+}
+
+#sudoku {
+  display: grid; grid-template-columns: repeat(9, 1fr); grid-template-rows: repeat(9, 1fr);
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--glass-border); border-radius: 12px;
+  width: 100%; aspect-ratio: 1 / 1; max-width: 400px; min-width: 220px;
+  user-select: none; position: relative; gap: 1px;
+  box-shadow: inset 0 0 20px rgba(0,0,0,0.5);
+}
+
+.cell {
+  background: var(--cell-bg); color: #fff;
+  display: flex; justify-content: center; align-items: center;
+  font-size: clamp(18px, 5vw, 24px); font-weight: 600; cursor: pointer;
+  transition: all 0.15s ease; position: relative;
+}
+.cell:hover { background: rgba(255, 255, 255, 0.08); }
+
+.segment-right { border-right: 2px solid rgba(255, 255, 255, 0.3); }
+.segment-bottom { border-bottom: 2px solid rgba(255, 255, 255, 0.3); }
+.border-right { border-right: 1px solid rgba(255, 255, 255, 0.05); }
+.border-bottom { border-bottom: 1px solid rgba(255, 255, 255, 0.05); }
+
+.selected {
+  background: rgba(16, 185, 129, 0.15) !important;
+  color: #fff !important;
+  box-shadow: inset 0 0 0 2px var(--accent-green);
+}
+.prefilled { color: var(--main-grey-dark) !important; cursor: default; font-weight: 700; }
+.error-wrong { color: var(--accent-red) !important; animation: pulseRed 1.5s infinite alternate; }
+
+@keyframes pulseRed {
+  0% { text-shadow: 0 0 4px var(--accent-red-glow); }
+  100% { text-shadow: 0 0 12px var(--accent-red); }
+}
+
+.highlight-line { background: rgba(56, 189, 248, 0.1) !important; }
+.highlight-num { background: rgba(16, 185, 129, 0.2) !important; color: #6ee7b7 !important; box-shadow: inset 0 0 10px rgba(16, 185, 129, 0.1); }
+
+#digits { width: 100%; margin-top: 20px; display: flex; flex-direction: column; gap: 12px; }
+.digits-row { display: grid; grid-template-columns: repeat(9, 1fr); gap: 6px; width: 100%; }
+
+.btn-digit {
+  background: var(--cell-bg); color: #fff;
+  border: 1px solid var(--glass-border); border-radius: 10px;
+  cursor: pointer; font-weight: 700; width: 100%; aspect-ratio: 1/1;
+  font-size: clamp(16px, 4vw, 22px);
+  transition: all 0.2s ease; display: flex; align-items: center; justify-content: center;
+}
+.btn-digit:disabled { opacity: 0.2; cursor: default; transform: none !important; box-shadow: none !important; }
+.btn-digit:not(:disabled):hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: var(--accent-green);
+  box-shadow: 0 0 12px var(--accent-green-glow);
+  transform: translateY(-2px);
+}
+.btn-digit:not(:disabled):active { transform: scale(0.9); }
+
+#control-row {
+  display: grid; grid-template-columns: 1fr auto 1fr;
+  align-items: center; justify-items: center;
+  width: 100%; min-height: 44px; gap: 12px; margin-top: 4px;
+}
+.btn-green-wide, .btn-red-wide {
+  font-weight: 700; font-size: 15px; padding: 10px 16px;
+  border-radius: 10px; border: 1px solid transparent;
+  user-select: none; cursor: pointer; width: 100%; text-align: center;
+  transition: all 0.2s ease; text-transform: lowercase;
+}
+.btn-green-wide { background: rgba(16, 185, 129, 0.2); color: #6ee7b7; border-color: rgba(16, 185, 129, 0.3); }
+.btn-green-wide:hover { background: rgba(16, 185, 129, 0.3); box-shadow: 0 0 15px var(--accent-green-glow); }
+.btn-red-wide { background: rgba(239, 68, 68, 0.2); color: #fca5a5; border-color: rgba(239, 68, 68, 0.3); }
+.btn-red-wide:hover { background: rgba(239, 68, 68, 0.3); box-shadow: 0 0 15px var(--accent-red-glow); }
+.btn-green-wide:disabled, .btn-red-wide:disabled { opacity: 0.3; cursor: default; transform: none; box-shadow: none; }
+
+.text-timer {
+  color: var(--main-grey); font-weight: 700; font-size: 22px;
+  font-variant-numeric: tabular-nums; letter-spacing: 0.1em;
+  text-shadow: 0 0 10px rgba(255,255,255,0.1);
+}
+
+.sudoka-modal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(11, 15, 25, 0.85);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 201;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.sudoka-modal.active { display: flex; opacity: 1; }
+
+.sudoka-modal .modal-box {
+  padding: 32px 24px; min-width: 260px; max-width: 380px;
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+  transform: scale(0.95); transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.sudoka-modal.active .modal-box { transform: scale(1); }
+
+.sudoka-modal .mod-title {
+  font-size: 24px; font-weight: 800; margin-bottom: 16px; letter-spacing: 0.1em;
+  color: var(--main-grey); text-transform: lowercase;
+}
+.sudoka-modal .mod-body {
+  font-size: 15px; color: var(--main-grey-dark); margin-bottom: 24px; line-height: 1.6;
+}
+.sudoka-modal .mod-title-green { color: var(--accent-green); text-shadow: 0 0 15px var(--accent-green-glow); }
+.sudoka-modal .mod-title-red { color: var(--accent-red); text-shadow: 0 0 15px var(--accent-red-glow); }
+
+.pause-checkbox {
+  display: flex; align-items: center; gap: 10px; cursor: pointer; color: var(--main-grey); font-size: 15px;
+}
+.pause-checkbox input { accent-color: var(--accent-green); width: 18px; height: 18px; cursor: pointer; }
+
+#toast-container {
+  position: fixed; top: 24px; left: 50%; transform: translateX(-50%);
+  z-index: 1000; display: flex; flex-direction: column; gap: 10px;
+  pointer-events: none; width: 90%; max-width: 400px;
+}
+.toast {
+  background: rgba(15, 23, 42, 0.9); backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border); border-left: 3px solid var(--accent-green);
+  color: var(--main-grey); padding: 12px 18px; border-radius: 8px;
+  font-size: 14px; font-weight: 500; text-align: center;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  animation: slideDown 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  pointer-events: auto;
+}
+.toast.hiding { animation: fadeOut 0.3s ease forwards; }
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeOut {
+  to { opacity: 0; transform: translateY(-10px); }
+}
+
+.log-details {
+  font-size: 13px; color: var(--main-grey-dark); margin-top: 8px;
+  background: rgba(0,0,0,0.2); padding: 8px; border-radius: 6px;
+  text-align: left; max-height: 100px; overflow-y: auto;
+}
+</style>
+</head>
+<body>
+
+<div class="bg-orbs">
+  <div class="orb orb-1"></div>
+  <div class="orb orb-2"></div>
+  <div class="orb orb-3"></div>
+</div>
+
+<div id="toast-container"></div>
+
+<div id="modal" class="sudoka-modal" tabindex="-1">
+  <div class="modal-box glass">
+    <div id="modal-title" class="mod-title"></div>
+    <div id="modal-body" class="mod-body"></div>
+    <button id="modal-ok-btn" class="btn-green-wide" style="display:none;">ок</button>
+    <button id="modal-menu-btn" class="btn-red-wide" style="display:none;">меню</button>
+  </div>
+</div>
+
+<div class="menu glass" aria-label="Меню: выбор уровня, настройки">
+  <div class="sudoku-title" aria-label="SUDOKA">
+    <span class="mode-toggle" data-mode="S" title="Подсветка строки и столбца">S</span>
+    <span class="mode-toggle" data-mode="U" title="Подсветка всех одинаковых цифр">U</span>
+    <span class="mode-toggle" data-mode="D" title="Автозаполнение цепи">D</span>
+    <span class="mode-toggle" data-mode="O" title="Ввод только возможных цифр">O</span>
+    <span class="mode-toggle" data-mode="K" title="Секретный режим">K</span>
+    <span class="mode-toggle" data-mode="A" title="Подсветка ошибок">A</span>
+  </div>
+  <div class="menu-levels">
+    <button class="btn" data-level="very-easy">желторотик</button>
+    <button class="btn" data-level="easy">не интересно</button>
+    <button class="btn" data-level="medium">школота</button>
+    <button class="btn" data-level="hard">это база</button>
+    <button class="btn" data-level="very-hard">для бати</button>
+    <button class="btn" data-level="extreme">штурм мозга</button>
+  </div>
+  <div class="menu-bottom-row">
+    <button id="settingsBtn" class="btn-icon" title="Настройки">⚙</button>
+    <div class="text-author">artiomyo games<br>2025</div>
+    <button id="showHelp" class="btn-icon" title="Справка">?</button>
+  </div>
+</div>
+
+<div id="game-area" class="hidden glass">
+  <div class="sudoku-title" aria-label="SUDOKA" style="margin-bottom:16px;">
+    <span class="mode-toggle" data-mode="S" title="Подсветка строки и столбца">S</span>
+    <span class="mode-toggle" data-mode="U" title="Подсветка всех одинаковых цифр">U</span>
+    <span class="mode-toggle" data-mode="D" title="Автозаполнение цепи">D</span>
+    <span class="mode-toggle" data-mode="O" title="Ввод только возможных цифр">O</span>
+    <span class="mode-toggle" data-mode="K" title="Секретный режим">K</span>
+    <span class="mode-toggle" data-mode="A" title="Подсветка ошибок">A</span>
+  </div>
+  <div id="sudoku" role="grid"></div>
+  <div id="digits"></div>
+</div>
+
+<script>
+const emptyCellsCount={"very-easy":2,"easy":10,"medium":30,"hard":45,"very-hard":55,"extreme":60};
+const levelLabels={
+  "very-easy":"желторотик", "easy":"не интересно", "medium":"школота",
+  "hard":"это база", "very-hard":"для бати", "extreme":"штурм мозга"
+};
+const modeDescriptions = {
+  'S': 'Подсветка строки и столбца',
+  'U': 'Подсветка всех одинаковых цифр',
+  'D': 'Автозаполнение цепи',
+  'O': 'Ввод только возможных цифр',
+  'K': 'Режим К активирован (загадка)',
+  'A': 'Подсветка ошибок'
+};
+
+let currentLevel=null, board=[], selectedCell=null, startTime=null, timerInterval=null, penaltySeconds=0,
+  isPaused=false, allowUnlimitedDigits=false, pauseTime=0, finished=false, errorTimeout=null;
+let modeErrorsHighlight=false, modeSHighlight=false, modeDAutoFix=false, modeRestrictDigits=false, modeUHighlightAll=false, modeK=false;
+let initialPuzzle=[], hasSeenHint=false;
+
+let logsEnabled = true;
+let modeTimeline = [];
+let modesEffectivelyUsed = new Set();
+
+function getFormattedTime() {
+  if (!startTime) return "00:00";
+  let elapsed = Math.floor((Date.now() - startTime) / 1000) + penaltySeconds;
+  let min = Math.floor(elapsed / 60).toString().padStart(2, '0');
+  let sec = (elapsed % 60).toString().padStart(2, '0');
+  return `${min}:${sec}`;
+}
+
+function logModeAction(modeName, isOn) {
+  if (!logsEnabled) return;
+  modeTimeline.push({
+    mode: modeName,
+    action: isOn ? 'включен' : 'выключен',
+    time: getFormattedTime()
+  });
+}
+
+function showToast(message, duration = 3000) {
+  const container = document.getElementById('toast-container');
+  const toast = document.createElement('div');
+  toast.className = 'toast';
+  toast.textContent = message;
+  container.appendChild(toast);
+  setTimeout(() => {
+    toast.classList.add('hiding');
+    setTimeout(() => toast.remove(), 300);
+  }, duration);
+}
+
+function showModal({title, text, ok, menu, green, red, afterOk, afterMenu}) {
+  clearTimeout(errorTimeout);
+  const modal = document.getElementById('modal');
+  const modalTitle = document.getElementById('modal-title');
+  const modalBody = document.getElementById('modal-body');
+  const btnOk = document.getElementById('modal-ok-btn');
+  const btnMenu = document.getElementById('modal-menu-btn');
+
+  modalTitle.className = "mod-title";
+  if (green) modalTitle.classList.add('mod-title-green');
+  if (red) modalTitle.classList.add('mod-title-red');
+  modalTitle.textContent = title || "";
+  modalBody.innerHTML = text || "";
+  btnOk.style.display = ok ? "" : "none";
+  btnMenu.style.display = menu ? "" : "none";
+  modal.classList.add('active');
+  if (ok) btnOk.focus();
+
+  btnOk.onclick = () => { modal.classList.remove('active'); if (afterOk) afterOk(); };
+  btnMenu.onclick = () => { modal.classList.remove('active'); if (afterMenu) afterMenu(); };
+}
+
+function closeModal() {
+  document.getElementById('modal').classList.remove('active');
+}
+
+function showHelpModal() {
+  showModal({
+    title: "как играть? 🧠",
+    text: `<b>Правила просты:</b> заполни поле 9×9 так, чтобы в строках, столбцах и квадратах 3×3 цифры от 1 до 9 не повторялись.<br><br>
+    <b>Но есть нюанс! 🔥</b><br>
+    Вверху есть буквы <b>S-U-D-O-K-A</b>. Это не просто название, это твои легальные чит-коды (или проклятия):<br>
+    🟢 <b>S</b> — подсветит строку и столбец<br>
+    🟢 <b>U</b> — найдёт все такие же цифры на поле<br>
+    🟢 <b>D</b> — автоцепочка (магия заполнения)<br>
+    🟢 <b>O</b> — не даст поставить заведомо неверную цифру<br>
+    🟢 <b>K</b> — для тех, кто ищет скрытый смысл<br>
+    🟢 <b>A</b> — подсветит ошибки (если не боишься правды)<br><br>
+    <b>Цель:</b> победить без мата, по возможности быстро и с кайфом!<br>
+    <i>Кнопка "стереть" — спасает, когда пальцы дрожат.</i>`,
+    ok: true, menu: false, green: true, red: false, afterOk: null, afterMenu: null
+  });
+}
+
+function openSettings() {
+  showModal({
+    title: "настройки ⚙️",
+    text: `<label class="pause-checkbox" style="justify-content:center; margin-bottom: 12px;">
+        <input id="logs-tog" type="checkbox" ${logsEnabled ? 'checked' : ''}>
+        <span>Вести логи использования режимов</span>
+    </label>
+    <div style="font-size:13px; color:var(--main-grey-dark); text-align:center; line-height: 1.5;">
+        Когда логи включены, при победе показывается, какие режимы S-U-D-O-K-A реально помогли вам ставить цифры, и время их переключения.
+    </div>`,
+    ok: true, menu: false, green: true, red: false,
+    afterOk: () => {
+      const tog = document.getElementById('logs-tog');
+      if (tog) {
+        logsEnabled = tog.checked;
+        if (!logsEnabled) {
+          modeTimeline = [];
+          modesEffectivelyUsed.clear();
+        }
+      }
+      showToast(logsEnabled ? '📜 Логи включены' : '📜 Логи выключены');
+    }
+  });
+}
+
+function showWinModal() {
+  const elapsed = Math.floor((Date.now() - startTime) / 1000) + penaltySeconds;
+  const min = Math.floor(elapsed / 60).toString().padStart(2, '0');
+  const sec = (elapsed % 60).toString().padStart(2, '0');
+
+  let logText = `<br>⏱ Время: <b>${min}:${sec}</b><br><br>`;
+
+  if (logsEnabled && modesEffectivelyUsed.size > 0) {
+    logText += `<b>🛠 Режимы, которые помогли:</b><br>`;
+    Array.from(modesEffectivelyUsed).forEach(mode => {
+      const firstOn = modeTimeline.find(l => l.mode === mode && l.action === 'включен');
+      const timeStr = firstOn ? ` (вкл. на ${firstOn.time})` : '';
+      logText += `<span style="color:var(--accent-green)">● ${mode}</span>${timeStr}<br>`;
+    });
+  } else if (logsEnabled) {
+    logText += `<b>🛠 Режимы:</b> не использовались (чистая классика! 😎)<br>`;
+  }
+
+  if (logsEnabled && modeTimeline.length > 4) {
+    logText += `<br><div class="log-details">📜 Хронология:<br>${modeTimeline.slice(-6).map(l => `[${l.time}] ${l.mode}: ${l.action}`).join('<br>')}</div>`;
+  }
+
+  showModal({
+    title: "победа! 🎉",
+    text: `Уровень "${levelLabels[currentLevel]}" пройден!<br>${logText}`,
+    ok: false, menu: true, green: true, red: false,
+    afterMenu: () => {
+      document.querySelector('.menu').style.display = 'flex';
+      document.getElementById('game-area').classList.add('hidden');
+      finished = false; startTime = null;
+      document.getElementById('digits').innerHTML = '';
+      document.getElementById('sudoku').innerHTML = '';
+      modeTimeline = [];
+      modesEffectivelyUsed.clear();
+    }
+  });
+}
+
+function showErrorModal() {
+  showModal({
+    title: "ошибка!",
+    text: 'решение неверно.<br>проверь красные клетки — они ошибочны.<br><br>Через 3 секунды возврат в меню.',
+    ok: true, menu: false, green: false, red: true,
+    afterOk: () => {
+      errorTimeout = setTimeout(() => {
+        document.getElementById('modal').classList.remove('active');
+        document.getElementById('game-area').classList.add('hidden');
+        document.querySelector('.menu').style.display = 'flex';
+        finished = false; startTime = null;
+        modeTimeline = [];
+        modesEffectivelyUsed.clear();
+      }, 3000);
+    }
+  });
+}
+
+function createBoard() {
+  const sudokuDiv = document.getElementById('sudoku'); sudokuDiv.innerHTML = '';
+  for (let r = 0; r < 9; r++) for (let c = 0; c < 9; c++) {
+    const cell = document.createElement('div'); cell.className = 'cell';
+    if (c === 2 || c === 5) cell.classList.add('segment-right');
+    if (r === 2 || r === 5) cell.classList.add('segment-bottom');
+    if ((c + 1) % 3 !== 0 && c < 8) cell.classList.add('border-right');
+    if ((r + 1) % 3 !== 0 && r < 8) cell.classList.add('border-bottom');
+    cell.dataset.row = r; cell.dataset.col = c; cell.tabIndex = 0;
+    cell.onclick = () => cellClicked(r, c);
+    cell.onkeydown = e => (e.key === 'Enter' || e.key === ' ') ? (e.preventDefault(), cellClicked(r, c)) : null;
+    sudokuDiv.appendChild(cell);
+  }
+}
+
+function generateFullSolution() {
+  const board = Array.from({ length: 9 }, () => Array(9).fill(''));
+  const shuffle = arr => { for (let i = arr.length - 1; i > 0; i--) { let j = Math.floor(Math.random() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; } };
+  const isSafe = (r, c, val) => {
+    for (let i = 0; i < 9; i++) { if (board[r][i] === val || board[i][c] === val) return false; }
+    let br = Math.floor(r / 3) * 3, bc = Math.floor(c / 3) * 3;
+    for (let rr = br; rr < br + 3; rr++) for (let cc = bc; cc < bc + 3; cc++) if (board[rr][cc] === val) return false;
+    return true;
+  };
+  const fillCell = (idx = 0) => {
+    if (idx >= 81) return true;
+    const r = Math.floor(idx / 9), c = idx % 9;
+    let candidates = ['1', '2', '3', '4', '5', '6', '7', '8', '9']; shuffle(candidates);
+    for (let val of candidates) { if (isSafe(r, c, val)) { board[r][c] = val; if (fillCell(idx + 1)) return true; } }
+    board[r][c] = ''; return false;
+  };
+  fillCell(); return board;
+}
+
+function generatePuzzle(level) {
+  const totalEmpty = emptyCellsCount[level] || 30;
+  let full = generateFullSolution(), puzzle = full.map(row => row.slice());
+  let indices = Array.from({ length: 81 }, (_, i) => i);
+  for (let i = indices.length - 1; i > 0; i--) { let j = Math.floor(Math.random() * (i + 1)); [indices[i], indices[j]] = [indices[j], indices[i]]; }
+  for (let i = 0; i < totalEmpty; i++) { let r = Math.floor(indices[i] / 9), c = Math.floor(indices[i] % 9); puzzle[r][c] = ''; }
+  return puzzle;
+}
+
+function isPrefilled(r, c) { return initialPuzzle[r][c] !== ''; }
+
+function checkValidCell(r, c, d) {
+  for (let i = 0; i < 9; i++) { if (i !== c && board[r][i] === d) return false; if (i !== r && board[i][c] === d) return false; }
+  let br = Math.floor(r / 3) * 3, bc = Math.floor(c / 3) * 3;
+  for (let rr = br; rr < br + 3; rr++) for (let cc = bc; cc < bc + 3; cc++) if ((rr !== r || cc !== c) && board[rr][cc] === d) return false;
+  return true;
+}
+
+function canPlaceDigit(r, c, d) {
+  if (isPrefilled(r, c)) return false;
+  if (!modeRestrictDigits) return true;
+  return checkValidCell(r, c, d);
+}
+
+function updateDigits() {
+  if (isPaused || finished) return;
+  const digitsDiv = document.getElementById('digits');
+  digitsDiv.innerHTML = '';
+  let digitsUsedCount = {};
+  for (let d = 1; d <= 9; d++) digitsUsedCount[d] = 0;
+  for (let r = 0; r < 9; r++) for (let c = 0; c < 9; c++) {
+    let val = board[r][c];
+    if (val) digitsUsedCount[val]++;
+  }
+  let emptyCells = [];
+  for (let r = 0; r < 9; r++) for (let c = 0; c < 9; c++)
+    if (!board[r][c] && !isPrefilled(r, c)) emptyCells.push({ r, c });
+  let remainingDigits = [];
+  for (let d = 1; d <= 9; d++) if ((digitsUsedCount[d] || 0) < 9) remainingDigits.push(String(d));
+
+  if (emptyCells.length === 1 && remainingDigits.length === 1) {
+    board[emptyCells[0].r][emptyCells[0].c] = remainingDigits[0];
+    renderBoard();
+    setTimeout(() => { updateDigits(); checkWin(); }, 120);
+    return;
+  }
+
+  const digitsRow = document.createElement('div');
+  digitsRow.className = 'digits-row';
+  for (let d = 1; d <= 9; d++) {
+    const btn = document.createElement('button');
+    btn.className = 'btn-digit';
+    let canInput = true;
+    if (modeRestrictDigits && selectedCell && !canPlaceDigit(selectedCell.r, selectedCell.c, String(d))) canInput = false;
+    let exhausted = !allowUnlimitedDigits && (digitsUsedCount[d] === 9);
+    btn.disabled = !selectedCell || !canInput || exhausted;
+    btn.textContent = exhausted || !canInput ? '' : d;
+    btn.style.cursor = btn.disabled ? 'default' : 'pointer';
+    btn.onclick = () => {
+      if (!btn.disabled && selectedCell) setDigit(selectedCell.r, selectedCell.c, String(d));
+    };
+    digitsRow.appendChild(btn);
+  }
+  digitsDiv.appendChild(digitsRow);
+
+  let controlRow = document.createElement('div');
+  controlRow.id = 'control-row';
+  let pause = document.createElement('button');
+  pause.id = 'pause-btn'; pause.className = 'btn-green-wide'; pause.textContent = 'пауза'; pause.tabIndex = 0;
+  pause.onclick = openPauseMenu;
+
+  let timer = document.createElement('span');
+  timer.id = 'timer'; timer.className = 'text-timer';
+  timer.textContent = window._sudokuTimerText || '00:00';
+
+  let clear = document.createElement('button');
+  clear.id = 'clear-btn'; clear.className = 'btn-red-wide';
+
+  if (currentLevel === 'extreme') {
+    clear.textContent = 'запрещено 😈';
+    clear.disabled = true;
+    clear.style.opacity = '0.3';
+    clear.style.cursor = 'not-allowed';
+  } else {
+    clear.textContent = 'стереть';
+    clear.disabled = !selectedCell || isPrefilled(selectedCell.r, selectedCell.c);
+    clear.onclick = () => {
+      if (selectedCell && !isPrefilled(selectedCell.r, selectedCell.c)) {
+        board[selectedCell.r][selectedCell.c] = '';
+        renderBoard(); updateDigits();
+      }
+    };
+  }
+
+  controlRow.appendChild(pause);
+  controlRow.appendChild(timer);
+  controlRow.appendChild(clear);
+  digitsDiv.appendChild(controlRow);
+}
+
+function openPauseMenu() {
+  isPaused = true; pauseTime = Date.now(); stopTimer();
+
+  let checkboxHtml = `<label class="pause-checkbox"><input id="unlimit-tog" type="checkbox"><span>отключать исчезновение цифр</span></label>`;
+
+  if (currentLevel === 'extreme') {
+    allowUnlimitedDigits = true;
+    checkboxHtml = `<label class="pause-checkbox" style="opacity:0.6; cursor:not-allowed;"><input id="unlimit-tog" type="checkbox" checked disabled><span>цифры не исчезают (обязательно для "штурм мозга" 😈)</span></label>`;
+  }
+
+  showModal({
+    title: "пауза",
+    text: checkboxHtml,
+    ok: true, menu: true, green: false, red: false,
+    afterOk: () => {
+      isPaused = false;
+      if (pauseTime && startTime) startTime += (Date.now() - pauseTime);
+      if (currentLevel && !finished) startTimer();
+      updateDigits(); renderBoard();
+    },
+    afterMenu: () => {
+      isPaused = false; finished = false;
+      document.getElementById('game-area').classList.add('hidden');
+      document.querySelector('.menu').style.display = 'flex';
+      startTime = null;
+    }
+  });
+
+  setTimeout(() => {
+    let togg = document.getElementById('unlimit-tog');
+    if (togg && currentLevel !== 'extreme') {
+      togg.checked = allowUnlimitedDigits;
+      togg.oninput = function () {
+        if (this.checked) {
+          allowUnlimitedDigits = true; this.disabled = true;
+          updateDigits(); renderBoard();
+        }
+      };
+    }
+  }, 30);
+}
+
+let autoFillTimeouts = [];
+function clearTimeouts(arr) { arr.forEach(t => clearTimeout(t)); }
+function animateAutoFill(d) {
+  clearTimeouts(autoFillTimeouts);
+  const emptyCells = [];
+  for (let r = 0; r < 9; r++) for (let c = 0; c < 9; c++) if (!board[r][c] && !isPrefilled(r, c)) emptyCells.push([r, c]);
+  if (emptyCells.length === 0) return;
+  let i = 0;
+  function fillNext() {
+    if (i >= emptyCells.length) { renderBoard(); updateDigits(); setTimeout(checkWin, 500); return; }
+    let [r, c] = emptyCells[i]; board[r][c] = d;
+    const cellDiv = document.querySelector(`.cell[data-row="${r}"][data-col="${c}"]`);
+    if (cellDiv) { cellDiv.style.background = 'var(--accent-green)'; cellDiv.style.color = '#0b0f19'; setTimeout(() => { cellDiv.style.background = ''; cellDiv.style.color = ''; }, 200); }
+    renderBoard(); updateDigits(); i++; autoFillTimeouts.push(setTimeout(fillNext, 250));
+  } fillNext();
+}
+
+function setDigit(r, c, d) {
+  if (isPrefilled(r, c)) return;
+  board[r][c] = d;
+
+  if (logsEnabled) {
+    if (modeSHighlight) modesEffectivelyUsed.add('S');
+    if (modeUHighlightAll) modesEffectivelyUsed.add('U');
+    if (modeDAutoFix) modesEffectivelyUsed.add('D');
+    if (modeRestrictDigits) modesEffectivelyUsed.add('O');
+    if (modeErrorsHighlight) modesEffectivelyUsed.add('A');
+    if (modeK) modesEffectivelyUsed.add('K');
+  }
+
+  if (modeDAutoFix) processChainFill(r, c);
+  renderBoard(); updateDigits(); checkWin();
+}
+
+function processChainFill(r, c) {
+  let filledSomething = false;
+  for (let cc = c + 1; cc < 9; cc++) {
+    if (!board[r][cc] && !isPrefilled(r, cc)) {
+      for (let d = 1; d <= 9; d++) {
+        let ds = String(d);
+        if (checkValidCell(r, cc, ds)) {
+          board[r][cc] = ds; filledSomething = true;
+          const cellDiv = document.querySelector(`.cell[data-row="${r}"][data-col="${cc}"]`);
+          if (cellDiv) {
+            cellDiv.style.background = 'var(--accent-green)'; cellDiv.style.color = '#0b0f19';
+            setTimeout(() => { cellDiv.style.background = ''; cellDiv.style.color = ''; }, 200);
+          }
+          processChainFill(r, cc); return;
+        }
+      }
+    }
+  }
+  if (!filledSomething) {
+    for (let rr = r + 1; rr < 9; rr++) {
+      if (!board[rr][c] && !isPrefilled(rr, c)) {
+        for (let d = 1; d <= 9; d++) {
+          let ds = String(d);
+          if (checkValidCell(rr, c, ds)) {
+            board[rr][c] = ds;
+            const cellDiv = document.querySelector(`.cell[data-row="${rr}"][data-col="${c}"]`);
+            if (cellDiv) {
+              cellDiv.style.background = 'var(--accent-green)'; cellDiv.style.color = '#0b0f19';
+              setTimeout(() => { cellDiv.style.background = ''; cellDiv.style.color = ''; }, 200);
+            }
+            processChainFill(rr, c); return;
+          }
+        }
+      }
+    }
+  }
+}
+
+function checkWin() {
+  if (finished) return true;
+  let hasEmpty = false, hasWrong = false;
+  for (let r = 0; r < 9; r++) for (let c = 0; c < 9; c++) {
+    const val = board[r][c];
+    if (!val) hasEmpty = true;
+    if (val && !checkValidCell(r, c, val)) hasWrong = true;
+  }
+  if (hasEmpty) return false;
+  finished = true; stopTimer();
+  if (!hasWrong) {
+    setTimeout(showWinModal, 200);
+    return true;
+  } else {
+    modeErrorsHighlight = true; modeUHighlightAll = false; renderBoard();
+    setTimeout(showErrorModal, 150);
+    return false;
+  }
+}
+
+function highlightSMode(r, c) {
+  clearAllHighlights();
+  let val = board[r][c]; if (!val) return;
+  document.querySelectorAll('#sudoku .cell').forEach(cell => { if (cell.textContent === val) cell.classList.add('highlight-num'); });
+  for (let i = 0; i < 9; i++) {
+    if (i !== c) document.querySelector(`.cell[data-row="${r}"][data-col="${i}"]`)?.classList.add('highlight-line');
+    if (i !== r) document.querySelector(`.cell[data-row="${i}"][data-col="${c}"]`)?.classList.add('highlight-line');
+  }
+}
+
+function highlightUAllMode(r, c) {
+  clearAllHighlights();
+  let val = board[r][c]; if (!val) return;
+  let allSame = []; for (let rr = 0; rr < 9; rr++) for (let cc = 0; cc < 9; cc++) if (board[rr][cc] === val) allSame.push([rr, cc]);
+  allSame.forEach(([rr, cc]) => { document.querySelector(`.cell[data-row="${rr}"][data-col="${cc}"]`)?.classList.add('highlight-num'); });
+  allSame.forEach(([rr, cc]) => {
+    for (let i = 0; i < 9; i++) {
+      if (i !== cc) document.querySelector(`.cell[data-row="${rr}"][data-col="${i}"]`)?.classList.add('highlight-line');
+      if (i !== rr) document.querySelector(`.cell[data-row="${i}"][data-col="${cc}"]`)?.classList.add('highlight-line');
+    }
+  });
+}
+
+function clearAllHighlights() {
+  document.querySelectorAll('.highlight-line').forEach(el => el.classList.remove('highlight-line'));
+  document.querySelectorAll('.highlight-num').forEach(el => el.classList.remove('highlight-num'));
+}
+
+function cellClicked(r, c) {
+  if ((modeSHighlight || modeUHighlightAll) && board[r][c] !== '') { selectedCell = { r, c }; }
+  else if (!isPrefilled(r, c)) { selectedCell = { r, c }; }
+  renderBoard(); updateDigits();
+}
+
+function startTimer() {
+  const timerDivRef = () => document.getElementById('timer');
+  if (timerInterval) clearInterval(timerInterval);
+  if (startTime === null) startTime = Date.now();
+  timerInterval = setInterval(() => {
+    if (isPaused || finished) return;
+    let elapsed = Math.floor((Date.now() - startTime) / 1000) + penaltySeconds;
+    let min = Math.floor(elapsed / 60).toString().padStart(2, '0'), sec = (elapsed % 60).toString().padStart(2, '0');
+    let text = `${min}:${sec}`;
+    window._sudokuTimerText = text;
+    if (timerDivRef()) timerDivRef().textContent = text;
+  }, 1000);
+}
+
+function stopTimer() { if (timerInterval) { clearInterval(timerInterval); timerInterval = null; } }
+
+document.getElementById('showHelp').onclick = showHelpModal;
+document.getElementById('settingsBtn').onclick = openSettings;
+
+function startGame(level) {
+  clearTimeout(errorTimeout);
+  currentLevel = level;
+  document.querySelector('.menu').style.display = 'none';
+  document.getElementById('game-area').classList.remove('hidden');
+  closeModal();
+
+  if (!hasSeenHint) {
+    setTimeout(() => {
+      showToast('💡 Нажимай на буквы S-U-D-O-K-A в заголовке, чтобы включать режимы!', 4000);
+      hasSeenHint = true;
+    }, 500);
+  }
+
+  setTimeout(() => {
+    initialPuzzle = generatePuzzle(level);
+    board = initialPuzzle.map(row => row.slice());
+    selectedCell = null;
+    allowUnlimitedDigits = false;
+    modeErrorsHighlight = false; modeSHighlight = false; modeDAutoFix = false; modeRestrictDigits = false; modeUHighlightAll = false; modeK = false;
+    finished = false; startTime = null;
+    modeTimeline = [];
+    modesEffectivelyUsed.clear();
+    updateModeToggles(); createBoard(); renderBoard(); updateDigits(); startTimer();
+  }, 350);
+}
+
+document.querySelectorAll('.btn').forEach(btn => {
+  if (btn.hasAttribute('data-level')) btn.onclick = () => startGame(btn.dataset.level);
+});
+
+document.querySelectorAll('.mode-toggle').forEach(span => {
+  const mode = span.dataset.mode;
+  span.onclick = () => toggleMode(span, mode);
+  span.onkeydown = e => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      toggleMode(span, mode);
+    }
+  };
+});
+
+function toggleMode(span, modeName) {
+  switch (modeName) {
+    case 'S': modeSHighlight = !modeSHighlight; if (modeSHighlight) modeUHighlightAll = false; break;
+    case 'D': modeDAutoFix = !modeDAutoFix; break;
+    case 'A': modeErrorsHighlight = !modeErrorsHighlight; break;
+    case 'O': modeRestrictDigits = !modeRestrictDigits; break;
+    case 'U': modeUHighlightAll = !modeUHighlightAll; if (modeUHighlightAll) modeSHighlight = false; break;
+    case 'K': modeK = !modeK; break;
+  }
+
+  const state = (modeName === 'S' && modeSHighlight) || (modeName === 'U' && modeUHighlightAll) ||
+                (modeName === 'D' && modeDAutoFix) || (modeName === 'O' && modeRestrictDigits) ||
+                (modeName === 'A' && modeErrorsHighlight) || (modeName === 'K' && modeK);
+
+  logModeAction(modeName, state);
+
+  if (state) {
+    showToast(`🟢 ${modeDescriptions[modeName]}`, 2500);
+  } else {
+    showToast(`⚪ Режим ${modeName} выключен`, 2000);
+  }
+
+  updateModeToggles(); renderBoard(); updateDigits();
+}
+
+function updateModeToggles() {
+  ["S", "D", "A", "O", "U", "K"].forEach(id => {
+    document.querySelectorAll(`.mode-toggle[data-mode="${id}"]`).forEach(span => {
+      let active = false;
+      switch (id) {
+        case 'S': active = modeSHighlight; break;
+        case 'D': active = modeDAutoFix; break;
+        case 'A': active = modeErrorsHighlight; break;
+        case 'O': active = modeRestrictDigits; break;
+        case 'U': active = modeUHighlightAll; break;
+        case 'K': active = modeK; break;
+      }
+      span.classList.toggle('active', active);
+    });
+  });
+}
+
+function renderBoard() {
+  for (let r = 0; r < 9; r++) for (let c = 0; c < 9; c++) {
+    const cell = document.querySelector(`.cell[data-row="${r}"][data-col="${c}"]`);
+    const val = board[r][c]; cell.textContent = val; cell.className = 'cell';
+    if (c === 2 || c === 5) cell.classList.add('segment-right');
+    if (r === 2 || r === 5) cell.classList.add('segment-bottom');
+    if ((c + 1) % 3 !== 0 && c < 8) cell.classList.add('border-right');
+    if ((r + 1) % 3 !== 0 && r < 8) cell.classList.add('border-bottom');
+    if (isPrefilled(r, c)) cell.classList.add('prefilled');
+    if (modeErrorsHighlight && val && !checkValidCell(r, c, val)) cell.classList.add('error-wrong');
+    if (selectedCell && selectedCell.r === r && selectedCell.c === c) cell.classList.add('selected');
+  }
+  if (modeSHighlight && selectedCell) highlightSMode(selectedCell.r, selectedCell.c);
+  else if (modeUHighlightAll && selectedCell) highlightUAllMode(selectedCell.r, selectedCell.c);
+  else clearAllHighlights();
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('game-area').classList.add('hidden');
+  document.querySelector('.menu').style.display = 'flex';
+});
+</script>
+</body>
+</html>
